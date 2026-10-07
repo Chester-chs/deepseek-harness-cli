@@ -243,7 +243,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download all target executables
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist-exe
           merge-multiple: true
@@ -307,7 +307,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: deepseek-harness-cli-release-assets
           path: dist-release
@@ -352,7 +352,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm whoami
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: deepseek-harness-cli-npm-packages
           path: dist-npm
@@ -384,7 +384,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: deepseek-harness-cli-cask
           path: cask-artifact
