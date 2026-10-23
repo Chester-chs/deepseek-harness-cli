@@ -45,6 +45,43 @@ ACP 不声明任何启动时能力，因为当前进程无法强制执行远程�
       DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY
 ```
 
+## 通过 ACP 连接 Gemini CLI
+
+Gemini CLI 通过 `gemini --acp` 提供 [ACP 模式](https://geminicli.com/docs/cli/acp-mode/)。现有提供方可以直接启动它，无需专用的 Gemini 协议适配器。在宿主机安装 `@google/gemini-cli`，按 Gemini 原生流程完成身份验证，并让 Harness 进程的 `PATH` 能找到 `gemini`。提供方使用该宿主命令及其原生版本；与 Codex 和 Claude Code Bundle 不同，它不会安装或锁定 Gemini 可执行文件。
+
+先将 `@deepseek-ai/dsh-subagent-acp` 加入目标 Profile 的依赖，再在 Profile patch 中插入以下提供方配置项。若密钥来自 Harness 进程环境，必须显式转发，因为子进程服务会移除环境中的凭证变量。使用 Gemini 原生登录时可省略 `env`。
+
+```sh
+dsh plugin --profile tui add @deepseek-ai/dsh-subagent-acp
+```
+
+```yaml
+- insert:
+    - id: subagent-gemini
+      name: '@deepseek-ai/dsh-subagent-acp'
+      config:
+        providerName: gemini
+        command: gemini
+        args: ['--acp']
+        permission: reject
+        env:
+          GEMINI_API_KEY: !!js process.env.GEMINI_API_KEY
+```
+
+在复制的 Agent Preset 中向模型开放工具，并为进程外提供方设置独立的 `toolName` 与深度策略。基础 Profile 已提供通用 Job 运行时和控制工具，可处理显式后台调用。
+
+```yaml
+- id: tool-subagent-gemini
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: gemini
+    toolName: subagent_gemini
+    backgroundMode: one-shot
+    maxDepth: provider-managed
+```
+
+取得完整的 Gemini 回答需要有效的原生身份验证。`permission: reject` 会拒绝 ACP 权限请求，而 Gemini 自身的策略、工作区信任和沙箱设置继续决定无需此类请求即可执行的操作。
+
 ## 结束原因映射
 
 | ACP | Harness |

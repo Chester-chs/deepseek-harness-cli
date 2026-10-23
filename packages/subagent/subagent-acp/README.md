@@ -45,6 +45,43 @@ ACP advertises no start-time capabilities because this process cannot enforce th
       DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY
 ```
 
+## Gemini CLI over ACP
+
+Gemini CLI exposes its [ACP mode](https://geminicli.com/docs/cli/acp-mode/) with `gemini --acp`. The existing provider can start it without a Gemini-specific protocol adapter. Install `@google/gemini-cli` on the host, authenticate it using Gemini's native setup, and make `gemini` available on the Harness process's `PATH`. The provider uses that host command and its native version; unlike the Codex and Claude Code Bundles, it does not install or pin a Gemini executable.
+
+Add `@deepseek-ai/dsh-subagent-acp` to the target Profile's dependencies, then insert this provider row in the Profile patch. A key supplied through the Harness process environment must be forwarded explicitly because the subprocess service removes ambient credential variables. Omit `env` when Gemini's native login provides authentication.
+
+```sh
+dsh plugin --profile tui add @deepseek-ai/dsh-subagent-acp
+```
+
+```yaml
+- insert:
+    - id: subagent-gemini
+      name: '@deepseek-ai/dsh-subagent-acp'
+      config:
+        providerName: gemini
+        command: gemini
+        args: ['--acp']
+        permission: reject
+        env:
+          GEMINI_API_KEY: !!js process.env.GEMINI_API_KEY
+```
+
+Grant the model a tool in a copied Agent Preset, using a distinct `toolName` and the out-of-process depth policy. The base Profile already supplies the generic Job runtime and controls for explicit background calls.
+
+```yaml
+- id: tool-subagent-gemini
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: gemini
+    toolName: subagent_gemini
+    backgroundMode: one-shot
+    maxDepth: provider-managed
+```
+
+A completed Gemini answer requires valid native authentication. `permission: reject` declines ACP permission requests, while Gemini's own policy, workspace trust, and sandbox settings continue to govern operations it can perform without such a request.
+
 ## Stop-reason mapping
 
 | ACP | Harness |

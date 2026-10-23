@@ -214,18 +214,18 @@ function responseInputTexts(body: Record<string, unknown>): string[] {
   })
 }
 
-describe('real @openai/codex 0.157.1 product', () => {
+describe('real @openai/codex 0.164.0 product', () => {
   it('starts approve-for-me through the real app-server and returns exact text', async () => {
     const sentinel = 'REAL_CODEX_SENTINEL_0_149_0'
     const task = 'Return the fixture sentinel exactly.'
     const { harness, fixture } = await realHarness([
       { kind: 'complete', text: sentinel },
     ], 'approve-for-me')
-    expect(codexPackage.version).toBe('0.157.1')
+    expect(codexPackage.version).toBe('0.164.0')
     const version = await execFileAsync(process.execPath, [codexEntry, '--version'], {
       env: { ...process.env, ...harness.env },
     })
-    expect(version.stdout.trim()).toBe('codex-cli 0.157.1')
+    expect(version.stdout.trim()).toBe('codex-cli 0.164.0')
     const schemaRoot = mkdtempSync(join(tmpdir(), 'dsh-codex-schema-'))
     roots.push(schemaRoot)
     await execFileAsync(process.execPath, [
@@ -241,18 +241,20 @@ describe('real @openai/codex 0.157.1 product', () => {
     )) as {
       definitions: {
         CodexErrorInfo: {
-          oneOf: JsonSchemaNode[]
+          anyOf: JsonSchemaNode[]
         }
       }
     }
-    expect(schema.definitions.CodexErrorInfo.oneOf[0]?.enum).toEqual([
+    expect(schema.definitions.CodexErrorInfo.anyOf[0]?.enum).toEqual([
       'contextWindowExceeded',
       'sessionBudgetExceeded',
       'usageLimitExceeded',
       'rateLimitExceeded',
+      'flexUnavailable',
       'serverOverloaded',
       'cyberPolicy',
       'misalignmentPolicyViolation',
+      'tooManyDenials',
       'internalServerError',
       'unauthorized',
       'badRequest',
@@ -260,7 +262,7 @@ describe('real @openai/codex 0.157.1 product', () => {
       'sandboxError',
       'other',
     ])
-    expect(schema.definitions.CodexErrorInfo.oneOf.slice(1).map(variant =>
+    expect(schema.definitions.CodexErrorInfo.anyOf.slice(1, -1).map(variant =>
       Object.keys(variant.properties ?? {})[0])).toEqual([
       'httpConnectionFailed',
       'responseStreamConnectionFailed',
@@ -268,7 +270,8 @@ describe('real @openai/codex 0.157.1 product', () => {
       'responseTooManyFailedAttempts',
       'activeTurnNotSteerable',
     ])
-    for (const variant of schema.definitions.CodexErrorInfo.oneOf.slice(1, 5)) {
+    expect(schema.definitions.CodexErrorInfo.anyOf.at(-1)?.type).toEqual(['string', 'object'])
+    for (const variant of schema.definitions.CodexErrorInfo.anyOf.slice(1, 5)) {
       const category = Object.keys(variant.properties ?? {})[0]!
       const detail = variant.properties?.[category]
       expect(detail?.required).toBeUndefined()
