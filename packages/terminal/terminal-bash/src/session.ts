@@ -176,6 +176,7 @@ export class LocalPtySession implements TerminalBackendSession {
   private pollingReady: LocalSendOperation | undefined
   private polling = false
   private promptSeen = false
+  private completedPromptCount = 0
   private promptTextSeen = false
   private promptTail = ''
   private shellPgid: number | undefined
@@ -184,6 +185,11 @@ export class LocalPtySession implements TerminalBackendSession {
   private closing = false
   private closePromise: Promise<void> | undefined
   private transportFailure: Error | undefined
+
+  /** Number of owned markers followed by the complete controlled prompt. */
+  get observedPromptCompletions(): number {
+    return this.completedPromptCount
+  }
 
   constructor(
     private readonly terminal: SubprocessTerminalHandle,
@@ -294,7 +300,6 @@ export class LocalPtySession implements TerminalBackendSession {
         return
       }
       // Closing can race the awaited provider write even though static analysis sees only local assignments.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- awaited provider writes can close the session.
       if (this.active === operation && !this.closing) {
         this.pollingReady = operation
         this.schedulePoll(operation)
@@ -387,14 +392,17 @@ export class LocalPtySession implements TerminalBackendSession {
       // to the foreground process group. Retain the marker; polling below is
       // the authority that accepts it only after bash owns the foreground.
       this.promptSeen = true
+      this.promptTextSeen = false
       this.promptTail = ''
       this.lastOutputAt = Date.now()
     }
     if (this.promptSeen && sanitized.promptTail !== undefined) {
+      const alreadyComplete = this.promptTextSeen
       const remaining = Math.max(0, CONTROLLED_PROMPT.length + 1 - this.promptTail.length)
       this.promptTail += sanitized.promptTail.slice(0, remaining)
       if (sanitized.promptTail.length > remaining) this.promptTail = `${CONTROLLED_PROMPT}\0`
       this.promptTextSeen = this.promptTail === CONTROLLED_PROMPT
+      if (!alreadyComplete && this.promptTextSeen) this.completedPromptCount += 1
     }
   }
 
@@ -470,7 +478,6 @@ export class LocalPtySession implements TerminalBackendSession {
       this.polling = false
       const active = this.active
       // Awaited provider inspection can clear or replace the active send despite static analysis.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- awaited inspection can replace the active send.
       if (active !== undefined && this.pollingReady === active) this.schedulePoll(active)
     }
   }

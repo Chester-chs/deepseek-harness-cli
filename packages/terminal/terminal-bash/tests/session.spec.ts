@@ -803,10 +803,12 @@ describe('LocalPtySession readiness and output', () => {
     const initializing = session.initialize().then(() => { settled = true })
 
     terminal.emitData('\x1b]133;D;0\x07')
+    expect(session.observedPromptCompletions).toBe(0)
     await vi.advanceTimersByTimeAsync(20)
     expect(settled).toBe(false)
 
     terminal.emitData('dsh> ')
+    expect(session.observedPromptCompletions).toBe(1)
     await vi.advanceTimersByTimeAsync(10)
     await initializing
     expect(session.motd).toBe('dsh> ')

@@ -348,10 +348,13 @@ describe('BashTerminalBackend startup rollback', () => {
     await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
     let spawned: SubprocessTerminalSpawnSpec | undefined
     let sent: TerminalSendRequest | undefined
+    let promptCompletions = 0
     const session = {
       motd: '',
+      get observedPromptCompletions() { return promptCompletions },
       startSend: (request: TerminalSendRequest) => {
         sent = request
+        promptCompletions += 1
         return {
           done: Promise.resolve({
             viewport: 'setup-echo dsh> ', waitReason: 'stdin_read' as const,
@@ -384,15 +387,18 @@ describe('BashTerminalBackend startup rollback', () => {
     await ctx.plugin(EmptySandbox)
     await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
     const sends: TerminalSendRequest[] = []
+    let promptCompletions = 0
     const session = {
       motd: '',
+      get observedPromptCompletions() { return promptCompletions },
       startSend: (request: TerminalSendRequest) => {
         sends.push(request)
         const second = sends.length > 1
+        if (second) promptCompletions += 1
         return {
           done: Promise.resolve({
-            viewport: second ? 'dsh> ' : 'PowerShell 7.6.4\n',
-            waitReason: 'inferred_idle' as const,
+            viewport: second ? 'dsh> ' : 'setup echo dsh> ',
+            waitReason: second ? 'stdin_read' as const : 'inferred_idle' as const,
             sessionStatus: { kind: 'running' as const }, truncated: false,
           }),
           readOutput: () => ({ delta: '', truncated: false }),
@@ -413,11 +419,80 @@ describe('BashTerminalBackend startup rollback', () => {
     expect(session.motd).toBe('dsh> ')
   })
 
+  it('uses the retained prompt when the marker arrives outside the send viewport', async () => {
+    const ctx = new Context()
+    await ctx.plugin(EmptySandbox)
+    await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
+    let sends = 0
+    let promptCompletions = 0
+    const session = {
+      motd: '',
+      get observedPromptCompletions() { return promptCompletions },
+      startSend: () => {
+        sends += 1
+        if (sends === 2) promptCompletions += 1
+        return {
+          done: Promise.resolve({
+            viewport: sends === 1 ? 'setup echo dsh> ' : 'marker landed between reads',
+            waitReason: sends === 1 ? 'inferred_idle' as const : 'stdin_read' as const,
+            sessionStatus: { kind: 'running' as const }, truncated: false,
+          }),
+          readOutput: () => ({ delta: '', truncated: false }),
+          cancel: () => false,
+        }
+      },
+      read: () => ({ text: sends === 2 ? 'dsh> ' : '', totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
+    } as unknown as LocalPtySession
+    const backend = new BashTerminalBackend(
+      ctx,
+      { ...config(), shellDialect: 'pwsh', shellPath: 'pwsh' },
+      async () => terminalHandle(),
+      () => session,
+    )
+    await backend.spawn(spec(agent(ctx)))
+    expect(sends).toBe(2)
+    expect(session.motd).toBe('dsh> ')
+  })
+
+  it('keeps the printable-prompt fallback for Windows read-only confinement', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' })
+    try {
+      const ctx = new Context()
+      await ctx.plugin(RecordingSandbox)
+      await ctx.plugin(SandboxPolicyService, { mode: 'read-only', workspaceRoot: '/workspace' })
+      const session = {
+        motd: '',
+        observedPromptCompletions: 0,
+        startSend: () => ({
+          done: Promise.resolve({
+            viewport: 'setup echo dsh> ', waitReason: 'inferred_idle' as const,
+            sessionStatus: { kind: 'running' as const }, truncated: false,
+          }),
+          readOutput: () => ({ delta: '', truncated: false }),
+          cancel: () => false,
+        }),
+        read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      } as unknown as LocalPtySession
+      const backend = new BashTerminalBackend(
+        ctx,
+        { ...config(), shellDialect: 'pwsh', shellPath: 'pwsh' },
+        async () => terminalHandle(),
+        () => session,
+      )
+      await backend.spawn(spec(agent(ctx)))
+      expect(session.motd).toBe('setup echo dsh> ')
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
+  })
+
   it('rejects a pwsh bootstrap whose shell exits or times out', async () => {
     const ctx = new Context()
     await ctx.plugin(EmptySandbox)
     await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
     const sessionFor = (waitReason: TerminalWaitReason): LocalPtySession => ({
+      observedPromptCompletions: 0,
       startSend: () => ({
         done: Promise.resolve({
           viewport: 'no-prompt', waitReason,
@@ -440,10 +515,13 @@ describe('BashTerminalBackend startup rollback', () => {
     await ctx.plugin(EmptySandbox)
     await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
     const sends: TerminalSendRequest[] = []
+    let promptCompletions = 0
     const session = {
       motd: '',
+      get observedPromptCompletions() { return promptCompletions },
       startSend: (request: TerminalSendRequest) => {
         sends.push(request)
+        promptCompletions += 1
         return {
           done: Promise.resolve({
             viewport: 'dsh> ', waitReason: 'stdin_read' as const,

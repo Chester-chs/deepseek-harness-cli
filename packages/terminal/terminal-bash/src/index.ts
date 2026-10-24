@@ -106,6 +106,7 @@ function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutio
 async function startupSession(
   session: LocalPtySession,
   dialect: ShellDialect,
+  allowMarkerlessPrompt: boolean,
   signal?: AbortSignal,
 ): Promise<void> {
   const start = async (): Promise<void> => {
@@ -119,11 +120,14 @@ async function startupSession(
     // first send also pins UTF-8 output (the shared pwsh-local preamble)
     // before anything runs: the session decode path treats PTY bytes as
     // UTF-8, and an un-pinned console writes its host code page for
-    // non-ASCII output. The banner-to-prompt gap can outlast the silence
-    // bound, so the wait loops over follow-up sends until the controlled
-    // prompt is actually visible (in the viewport or the retained scrollback
-    // when it landed between sends), bounded by the send deadline.
+    // non-ASCII output. The echoed setup command contains the printable
+    // prompt, so POSIX startup also waits for the owned marker and complete prompt.
+    // Windows read-only confinement can block the marker setup; there the
+    // printable prompt remains the fallback. The banner-to-prompt gap can
+    // outlast the silence bound, so follow-up sends wait for readiness.
+    const initialPromptCompletions = session.observedPromptCompletions
     let viewport = ''
+    let scrollback = ''
     for (;;) {
       const first = viewport.length === 0
       const operation = session.startSend({
@@ -135,10 +139,13 @@ async function startupSession(
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
-      const scrollback = session.read({ offset: 0, count: 20 }).text
-      if (viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)) break
+      scrollback = session.read({ offset: 0, count: 20 }).text
+      const promptVisible = viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)
+      const markerReady = session.observedPromptCompletions > initialPromptCompletions
+      /* v8 ignore next -- Windows ConstrainedLanguage fallback runs in native Windows CI. */
+      if (promptVisible && (markerReady || allowMarkerlessPrompt)) break
     }
-    session.motd = viewport
+    session.motd = viewport.includes(CONTROLLED_PROMPT) ? viewport : scrollback
   }
   if (signal === undefined) {
     await start()
@@ -190,7 +197,9 @@ export class BashTerminalBackend implements TerminalBackend {
     })
     const session = this.createSession(terminal, this.config)
     try {
-      await startupSession(session, this.config.shellDialect, spec.signal)
+      /* v8 ignore next -- Windows read-only ConstrainedLanguage fallback runs in native Windows CI. */
+      const allowMarkerlessPrompt = process.platform === 'win32' && policy.mode === 'read-only'
+      await startupSession(session, this.config.shellDialect, allowMarkerlessPrompt, spec.signal)
       return session
     } catch (error) {
       try {
