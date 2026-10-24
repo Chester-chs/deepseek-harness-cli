@@ -245,6 +245,10 @@ def mcp_cordis(server_script: Path) -> str:
             "config": {"root": "./sessions", "compression": "none"},
         },
         {
+            "id": "mcp",
+            "name": "@deepseek-ai/dsh-mcp",
+        },
+        {
             "id": "mcp-fixture",
             "name": "@deepseek-ai/dsh-mcp-client",
             "config": {

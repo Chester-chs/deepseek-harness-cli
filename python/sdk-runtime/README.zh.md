@@ -13,7 +13,7 @@ Python SDK 的运行时载体包（分发名 `deepseek-harness-runtime-bin`，�
 
 两种载体承载相同的内容，且只定义一次：本包根目录的 [package.json](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/package.json) 是 single-exe 流水线的部署根目录——一份零代码的纯依赖 manifest，其依赖闭包既是编译进 exe 的插件集，也是物化到 `runtime/node/` 的文件树。往分发物里加插件，就是在那里加一行依赖再重新构建。
 
-内置插件集合包含 `@deepseek-ai/dsh-mcp-client`，因此外部 Cordis 配置可以连接 stdio 或 Streamable HTTP MCP server，并向模型提供这些 server 的工具。wheel 包不包含 MCP server 程序或凭据：stdio 配置需要提供可执行程序及其参数，Streamable HTTP 配置需要提供 URL 和请求头。该桥接仅支持 MCP 工具，尚不支持 MCP Resources 与 Prompts。
+内置插件集合包含 `@deepseek-ai/dsh-mcp` 与 `@deepseek-ai/dsh-mcp-client`，因此外部 Cordis 配置可先挂载 registry，再连接 stdio 或 Streamable HTTP MCP server，并向模型提供这些 server 的工具。wheel 包不包含 MCP server 程序或凭据：stdio 配置需要提供可执行程序及其参数，Streamable HTTP 配置需要提供 URL 和请求头。该桥接仅支持 MCP 工具，尚不支持 MCP Resources 与 Prompts。
 
 exe 缺失时抛出 `FileNotFoundError`，并写明两种获取途径：在 deepseek-harness 检出中经 `scripts/build-exe-for-python-sdk.ts` 构建，或安装 `build-exe-for-python-sdk` CI 工作流生成的对应平台运行时 wheel 包。仅限开发的 node 载体缺失时只提示构建脚本这一条途径。该工作流只保留 wheel 包，不保留独立 exe 归档。获取策略与查找接口刻意分离，之后可以换成按需下载而不改动任何调用方。
 
