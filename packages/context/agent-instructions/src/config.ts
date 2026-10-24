@@ -6,7 +6,7 @@
 
 import { relative } from 'node:path'
 import z from '@deepseek-ai/schemastery'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 const DEFAULT_PROJECT_ROOT_MARKERS = ['.git'] as const
 const DEFAULT_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const
@@ -48,6 +48,7 @@ export const Config: z<Config> = z.object({
 /** Normalized instruction discovery configuration. */
 export interface ResolvedDiscoveryConfig {
   dshHome: string
+  agentsHome: string
   projectRootMarkers: string[]
   instructionFileCandidates: string[]
   localInstructionFileCandidates: string[]
@@ -88,7 +89,14 @@ export function workspaceBaselineIdentity(
  */
 export function resolveConfig(config: Config): ResolvedConfig {
   return {
-    ...resolveDiscoveryConfig(config),
+    ...resolveDiscoveryConfig({
+      ...config.dshHome === undefined ? {} : { dshHome: config.dshHome },
+      ...config.projectRootMarkers === undefined ? {} : { projectRootMarkers: config.projectRootMarkers },
+      ...config.instructionFileCandidates === undefined ? {} : { instructionFileCandidates: config.instructionFileCandidates },
+      ...config.localInstructionFileCandidates === undefined
+        ? {}
+        : { localInstructionFileCandidates: config.localInstructionFileCandidates },
+    }),
     maxBytes: config.maxBytes,
     maxSourceBytes: config.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES,
   }
@@ -96,14 +104,18 @@ export function resolveConfig(config: Config): ResolvedConfig {
 
 /**
  * Resolve the subset of configuration used before instruction content is rendered.
- * @param config - optional discovery controls.
+ * The explicit harness home or `$DSH_HOME` and the process shared-agents home
+ * are normalized once for both baseline loading and reconciliation.
+ * @param config - discovery controls and optional resolved homes.
  * @returns normalized home, root markers, and instruction candidates.
  */
 export function resolveDiscoveryConfig(
-  config: Pick<Config, 'dshHome' | 'projectRootMarkers' | 'instructionFileCandidates' | 'localInstructionFileCandidates'>,
+  config: Pick<Config, 'dshHome' | 'projectRootMarkers' | 'instructionFileCandidates' | 'localInstructionFileCandidates'>
+    & { agentsHome?: string },
 ): ResolvedDiscoveryConfig {
   return {
     dshHome: resolveDshHome(config.dshHome),
+    agentsHome: resolveAgentsHome(config.agentsHome),
     projectRootMarkers: config.projectRootMarkers ?? [...DEFAULT_PROJECT_ROOT_MARKERS],
     instructionFileCandidates: resolveInstructionFileCandidates(
       config.instructionFileCandidates,

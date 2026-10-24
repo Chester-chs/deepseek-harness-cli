@@ -435,6 +435,7 @@ const SCENARIOS: Scenario[] = [
   // resulting prefix needs its own pinned header class.
   {
     name: 'agent-instructions',
+    env: { DSH_AGENTS_HOME: './.agents' },
     hasModelTurn: true,
     recorded: false,
     overridden: true,

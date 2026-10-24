@@ -6,7 +6,7 @@ DeepSeek Harness 用户数据的共享文件系统路径辅助工具。
 
 ## DSH 主目录
 
-`resolveDshHome()` 解析 DeepSeek Harness 的单根主目录。优先级从高到低为：显式配置的路径、`$DSH_HOME`、`~/.dsh`。harness 将所有用户数据保存在同一根目录下。
+`resolveDshHome()` 解析 DeepSeek Harness 的单根主目录。优先级从高到低为：显式配置的路径、`$DSH_HOME`、`~/.dsh`。harness 自有用户数据保留在此根目录，共享 agent 配置使用独立根目录。
 
 `dshHomePath(...segments)` 使用 Node 的平台路径规则，将子路径段拼接到解析后的主目录下。不传入任何路径段时，返回主目录本身。
 
@@ -17,6 +17,12 @@ DeepSeek Harness 用户数据的共享文件系统路径辅助工具。
 `defaultDshHome()` 使用 Node 的平台路径规则，将操作系统主目录与 `.dsh` 拼接，并返回默认 DeepSeek Harness 主目录。
 
 `expandHomePath()` 使用操作系统主目录展开 `~`、`~/...` 和 Windows 风格的 `~\...` 前缀。它会保留非波浪号路径和 `~user/...` 原样不变。
+
+## 共享 agents home
+
+`resolveAgentsHome()` 依次选择显式路径、`$DSH_AGENTS_HOME` 与 `~/.agents`。空或仅含空白的环境变量视为未设置，波浪号展开规则与 `resolveDshHome()` 相同。`defaultAgentsHome()` 返回默认根目录，`agentsHomeDisplay()` 将其显示为 `~/.agents` 或 `$DSH_AGENTS_HOME`，不暴露机器绝对路径。
+
+指令加载器读取此共享根目录的 `AGENTS.md`，文件系统 Skill 提供方扫描其中的 `skills/` 目录。
 
 ## 监听路径
 
