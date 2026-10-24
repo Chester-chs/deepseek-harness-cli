@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { TerminalBackendCleanupError } from '@deepseek-ai/dsh-terminal'
-import type { TerminalBackend, TerminalBackendSpawnSpec } from '@deepseek-ai/dsh-terminal'
+import type { TerminalBackend, TerminalBackendSpawnSpec, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import { effectiveSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
@@ -106,59 +106,59 @@ function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutio
 async function startupSession(
   session: LocalPtySession,
   dialect: ShellDialect,
-  allowMarkerlessPrompt: boolean,
+  timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
+  let startupOperation: TerminalSendOperation | undefined
   const start = async (): Promise<void> => {
     if (dialect === 'bash') {
       await session.initialize(signal)
       return
     }
-    // pwsh cannot install its prompt from the environment: write the prompt
-    // function through the session and wait for the first marker prompt,
-    // which is also the readiness contract of the bash initialize path. The
-    // first send also pins UTF-8 output (the shared pwsh-local preamble)
-    // before anything runs: the session decode path treats PTY bytes as
-    // UTF-8, and an un-pinned console writes its host code page for
-    // non-ASCII output. The echoed setup command contains the printable
-    // prompt, so POSIX startup also waits for the owned marker and complete prompt.
-    // Windows read-only confinement can block the marker setup; there the
-    // printable prompt remains the fallback. The banner-to-prompt gap can
-    // outlast the silence bound, so follow-up sends wait for readiness.
-    const initialPromptCompletions = session.observedPromptCompletions
+    // pwsh cannot install its prompt from the environment. Write the prompt
+    // function through the session, pin UTF-8 output before user input, and
+    // accept only backend stdin_read evidence; echoed setup source containing
+    // the printable prompt is not readiness. Follow-up sends bridge silence
+    // settlements during startup, while one absolute deadline bounds them.
     let viewport = ''
-    let scrollback = ''
     for (;;) {
       const first = viewport.length === 0
-      const operation = session.startSend({
+      startupOperation = session.startSend({
         text: first ? ENCODING_PREAMBLE + PWSH_PROMPT_SETUP : '',
         submit: first,
         ...signal !== undefined ? { signal } : {},
       })
-      const result = await operation.done
+      const result = await startupOperation.done
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
-      scrollback = session.read({ offset: 0, count: 20 }).text
-      const promptVisible = viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)
-      const markerReady = session.observedPromptCompletions > initialPromptCompletions
-      /* v8 ignore next -- Windows ConstrainedLanguage fallback runs in native Windows CI. */
-      if (promptVisible && (markerReady || allowMarkerlessPrompt)) break
+      if (result.waitReason === 'stdin_read') break
     }
-    session.motd = viewport.includes(CONTROLLED_PROMPT) ? viewport : scrollback
+    session.motd = viewport
   }
-  if (signal === undefined) {
-    await start()
-    return
+  const races: Promise<void>[] = []
+  let onAbort: (() => void) | undefined
+  if (signal !== undefined) {
+    const aborted = Promise.withResolvers<never>()
+    onAbort = () => { aborted.reject(signal.reason) }
+    signal.addEventListener('abort', onAbort, { once: true })
+    races.push(aborted.promise)
   }
-  const aborted = Promise.withResolvers<never>()
-  const onAbort = (): void => { aborted.reject(signal.reason) }
-  signal.addEventListener('abort', onAbort, { once: true })
+  let deadlineTimer: NodeJS.Timeout | undefined
+  if (dialect === 'pwsh') {
+    const deadline = Promise.withResolvers<never>()
+    deadlineTimer = setTimeout(() => {
+      startupOperation?.cancel()
+      deadline.reject(new Error('PTY shell did not reach readiness before startup timeout'))
+    }, timeoutMs)
+    races.push(deadline.promise)
+  }
   try {
-    signal.throwIfAborted()
-    await Promise.race([start(), aborted.promise])
+    signal?.throwIfAborted()
+    await Promise.race([start(), ...races])
   } finally {
-    signal.removeEventListener('abort', onAbort)
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+    if (signal !== undefined && onAbort !== undefined) signal.removeEventListener('abort', onAbort)
   }
 }
 
@@ -197,9 +197,7 @@ export class BashTerminalBackend implements TerminalBackend {
     })
     const session = this.createSession(terminal, this.config)
     try {
-      /* v8 ignore next -- Windows read-only ConstrainedLanguage fallback runs in native Windows CI. */
-      const allowMarkerlessPrompt = process.platform === 'win32' && policy.mode === 'read-only'
-      await startupSession(session, this.config.shellDialect, allowMarkerlessPrompt, spec.signal)
+      await startupSession(session, this.config.shellDialect, this.config.timeoutMs, spec.signal)
       return session
     } catch (error) {
       try {
