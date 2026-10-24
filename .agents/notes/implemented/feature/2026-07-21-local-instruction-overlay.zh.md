@@ -14,7 +14,7 @@ Status: implemented
 
 该默认值定义在插件的 `Config` schema 中，而非某个产品的 `cordis.yml` 里，因此每个嵌入方（TUI、ACP、headless）读取 `.local.` 文件的行为一致，部署方也可以在一处覆盖或关闭该行为。这与插件自身持有的 `instructionFileCandidates` 默认值保持对称。
 
-固定的用户全局文件 `$DSH_HOME/AGENTS.md` 没有本地覆盖层，始终只有基础文件。
+[用户全局指令链](../architecture/2026-10-05-shared-agents-root-instructions.md)中的两个文件均没有本地覆盖层，始终只有基础文件。
 
 ## 每个候选各自独立的 scope
 

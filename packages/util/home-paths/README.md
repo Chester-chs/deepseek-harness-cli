@@ -6,7 +6,7 @@ Shared filesystem path helpers for DeepSeek Harness user data.
 
 ## DSH home
 
-`resolveDshHome()` resolves the single-root DeepSeek Harness home. Precedence, highest first: an explicit configured path, `$DSH_HOME`, then `~/.dsh`. The harness keeps all user data under one root.
+`resolveDshHome()` resolves the single-root DeepSeek Harness home. Precedence, highest first: an explicit configured path, `$DSH_HOME`, then `~/.dsh`. Harness-owned user data stays under this root; shared agent configuration has its own root.
 
 `dshHomePath(...segments)` joins child segments onto that resolved home with Node's platform path rules. With no segments it returns the home itself.
 
@@ -17,6 +17,12 @@ Shared filesystem path helpers for DeepSeek Harness user data.
 `defaultDshHome()` returns the default DeepSeek Harness home by joining the operating-system home directory with `.dsh`, using Node's platform path rules.
 
 `expandHomePath()` expands `~`, `~/...`, and Windows-style `~\...` prefixes against the operating-system home directory. It leaves non-tilde paths and `~user/...` untouched.
+
+## Shared agents home
+
+`resolveAgentsHome()` resolves an explicit path, then `$DSH_AGENTS_HOME`, then `~/.agents`. Empty or whitespace-only environment values are unset; tilde expansion matches `resolveDshHome()`. `defaultAgentsHome()` returns the default root, and `agentsHomeDisplay()` labels it `~/.agents` or `$DSH_AGENTS_HOME` without exposing an absolute machine path.
+
+The instruction loader reads `AGENTS.md` from this shared root, and the filesystem Skill provider scans its `skills/` directory.
 
 ## Watch paths
 

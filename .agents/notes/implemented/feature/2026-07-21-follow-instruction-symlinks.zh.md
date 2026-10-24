@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-指令发现不再用 `lstat` 检查末段。每个候选（用户全局的 `$DSH_HOME/AGENTS.md`、每个基础候选，以及每个本地覆盖候选）都会被解析，并对其解析后的目标做 stat，基线组合时与每一轮 `tools/post-execute` 协调时一视同仁。一个目标为常规文件的符号链接会加载该目标的内容；一个解析后的非文件目标（包括指向目录的链接）是被确认的缺失，会像缺失文件一样移除该 scope；一个 `resolve` 或 `stat` 异常被归类为暂时不可用，且从不移除已加载的 scope。`nodeStatFile` 调用 `stat`（宿主路径），`fsStatFile` 先 `resolve` 再 `stat`（提供方路径）；两者都不调用 `lstat`。
+指令发现不再用 `lstat` 检查末段。每个候选（两个用户全局 `AGENTS.md` 文件、每个基础候选，以及每个本地覆盖候选）都会被解析，并对其解析后的目标做 stat，基线组合时与每一轮 `tools/post-execute` 协调时一视同仁。一个目标为常规文件的符号链接会加载该目标的内容；一个解析后的非文件目标（包括指向目录的链接）是被确认的缺失，会像缺失文件一样移除该 scope；一个 `resolve` 或 `stat` 异常被归类为暂时不可用，且从不移除已加载的 scope。`nodeStatFile` 调用 `stat`（宿主路径），`fsStatFile` 先 `resolve` 再 `stat`（提供方路径）；两者都不调用 `lstat`。
 
 一个被跟随的符号链接对下游每一步都是普通文件。它参与按目录的内容去重（[加载全部并去重说明](2026-07-21-instruction-load-all-dedup.md)），因此一个符号链接指向其同级 `AGENTS.md` 的 `CLAUDE.md` 现在会解析到相同内容，并像任何逐字节相同的真实副本一样被合并，而不再作为特例被跳过。
 

@@ -14,7 +14,7 @@ The plugin loads a second, independent candidate list per project directory. `lo
 
 The default lives in the plugin `Config` schema rather than a product `cordis.yml`, so every embedder (TUI, ACP, headless) reads `.local.` files consistently and a deployment overrides or disables the behavior in one place. This is symmetric with the plugin-owned `instructionFileCandidates` default.
 
-The fixed user-global `$DSH_HOME/AGENTS.md` has no local overlay and stays base-only.
+Both files in the [user-global chain](../architecture/2026-10-05-shared-agents-root-instructions.md) have no local overlay and stay base-only.
 
 ## Independent scopes per candidate
 

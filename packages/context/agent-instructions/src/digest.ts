@@ -16,7 +16,7 @@ export function instructionContentSha1(content: string): string {
 }
 
 /**
- * Compute the whitespace-insensitive identity used for per-directory duplicate
+ * Compute the whitespace-insensitive identity used for candidate-group duplicate
  * suppression. Leading and trailing whitespace is trimmed before hashing so a
  * symlinked or byte-copied sibling that differs only by surrounding whitespace
  * still collapses to a single rendered file.
