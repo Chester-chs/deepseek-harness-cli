@@ -555,6 +555,53 @@ describe('Documentation Pages workflow', () => {
 })
 
 describe('CLI release workflow', () => {
+  it('passes the dispatch version through the environment and validates it before emitting outputs', () => {
+    const workflow = loadWorkflow('.github/workflows/deepseek-harness-cli-release.yml')
+    const plan = workflowJob(workflow, 'plan')
+    const step: unknown = Array.isArray(plan.steps)
+      ? plan.steps.find((value: unknown) => isRecord(value) && value.id === 'version')
+      : undefined
+    expect(step).toMatchObject({ env: { INPUT_VERSION: '${{ github.event.inputs.version }}' } })
+    if (!isRecord(step) || typeof step.run !== 'string') throw new TypeError('version step must define run')
+    expect(step.run).not.toContain('${{ github.event.inputs.version }}')
+    expect(step.run).toContain('[[ "$version" =~')
+    expect(step.run.indexOf('[[ "$version" =~')).toBeLessThan(step.run.indexOf('echo "version='))
+  })
+
+  it('publishes every platform before the shim and permits safe publication retries', () => {
+    const workflow = loadWorkflow('.github/workflows/deepseek-harness-cli-release.yml')
+    const publish = workflowJob(workflow, 'npm-publish')
+    const steps = Array.isArray(publish.steps) ? publish.steps.filter(isRecord) : []
+    const step = steps.find(value => typeof value.run === 'string' && value.run.includes('npm publish'))
+    if (!isRecord(step) || typeof step.run !== 'string') throw new TypeError('publish step must define run')
+    expect(step.run).toContain('npm view')
+    expect(step.run).toContain('E404')
+    expect(step.run.indexOf('publish_package "./dist-npm/platform/')).toBeLessThan(
+      step.run.indexOf('publish_package "./dist-npm/main"'),
+    )
+    expect(step.run).toContain('--provenance')
+    expect(publish.permissions).toMatchObject({ 'id-token': 'write' })
+  })
+
+  it('pins release actions and attests tarballs before their upload', () => {
+    const workflow = loadWorkflow('.github/workflows/deepseek-harness-cli-release.yml')
+    if (!isRecord(workflow.jobs)) throw new TypeError('release workflow must define jobs')
+    for (const job of Object.values(workflow.jobs).filter(isRecord)) {
+      const steps = Array.isArray(job.steps) ? job.steps.filter(isRecord) : []
+      for (const step of steps) {
+        if (typeof step.uses === 'string') expect(step.uses).toMatch(/@[a-f0-9]{40}$/)
+      }
+    }
+    const job = workflowJob(workflow, 'package')
+    const steps = Array.isArray(job.steps) ? job.steps.filter(isRecord) : []
+    const attest = steps.findIndex(step => typeof step.uses === 'string' && step.uses.startsWith('actions/attest@'))
+    const upload = steps.findIndex(step => isRecord(step.with) && step.with.name === 'deepseek-harness-cli-release-assets')
+    expect(attest).toBeGreaterThanOrEqual(0)
+    expect(attest).toBeLessThan(upload)
+    expect(steps[attest]).toMatchObject({ with: { 'subject-path': 'dist-release/*.tar.gz' } })
+    expect(job.permissions).toMatchObject({ 'id-token': 'write', attestations: 'write' })
+  })
+
   it('builds win-x64 on windows-2025 beside the four Unix targets', () => {
     const workflow = loadWorkflow('.github/workflows/deepseek-harness-cli-release.yml')
     const plan = workflowJob(workflow, 'plan')
