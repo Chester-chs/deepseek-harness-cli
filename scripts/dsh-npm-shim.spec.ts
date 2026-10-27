@@ -25,31 +25,34 @@ describe('npm shim lifecycle', () => {
         expect(shimProcess.listenerCount(received)).toBe(0)
       }),
     })
-    const executableSource = shimSource
-      .replace(/^#!.*\n/, '')
-      .replace(/^import .*\n/gm, '')
-      .replace('import.meta.url', JSON.stringify('file:///shim.js'))
-    runInNewContext(executableSource, {
-      process: shimProcess,
-      console,
-      spawn: () => child,
-      createRequire: () => ({ resolve: () => '/fake/executable' }),
-    })
+    loadShim(child, shimProcess)
     shimProcess.emit(signal)
     expect(child.kill).toHaveBeenCalledWith(signal)
     child.emit('exit', null, signal)
     expect(shimProcess.kill).toHaveBeenCalledWith(123, signal)
   })
 
-  it('passes arguments, stdio, and a nonzero child exit code through the installed entry', () => {
+  it('reports asynchronous spawn errors and exits with code 1', () => {
+    const child = Object.assign(new EventEmitter(), { kill: vi.fn() })
+    const shimProcess = Object.assign(new EventEmitter(), {
+      platform: 'linux', arch: 'x64', argv: ['node', 'shim'], pid: 123, exit: vi.fn(),
+    })
+    const logger = { error: vi.fn() }
+    loadShim(child, shimProcess, logger)
+    child.emit('error', new Error('permission denied'))
+    expect(logger.error).toHaveBeenCalledWith('deepseek-harness-cli: failed to start /fake/executable: permission denied')
+    expect(shimProcess.exit).toHaveBeenCalledWith(1)
+  })
+
+  it.each([0, 7])('passes arguments, stdio, and child exit code %i through the installed entry', (code) => {
     const { entry } = fixture()
-    const result = spawnSync(process.execPath, [entry, '-e', 'console.log(process.argv[1]); process.exit(7)', 'two words'], {
+    const result = spawnSync(process.execPath, [entry, '-e', `console.log(process.argv[1]); process.exit(${code})`, 'two words'], {
       encoding: 'utf8', timeout: 10_000,
     })
-    expect(result.status).toBe(7)
+    expect(result.status).toBe(code)
     expect(result.stdout.trim()).toBe('two words')
     expect(result.stderr).toBe('')
-  })
+  }, 15_000)
 
   it('reports spawn failures in one line and exits unsuccessfully', () => {
     const { entry, executable } = fixture(false)
@@ -79,6 +82,19 @@ describe('npm shim lifecycle', () => {
     }
   }, 10_000)
 })
+
+function loadShim(child: EventEmitter, shimProcess: object, logger: Pick<Console, 'error'> = console): void {
+  const executableSource = shimSource
+    .replace(/^#!.*\n/, '')
+    .replace(/^import .*\n/gm, '')
+    .replace('import.meta.url', JSON.stringify('file:///shim.js'))
+  runInNewContext(executableSource, {
+    process: shimProcess,
+    console: logger,
+    spawn: () => child,
+    createRequire: () => ({ resolve: () => '/fake/executable' }),
+  })
+}
 
 function fixture(withExecutable = true): { entry: string; executable: string } {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-shim-'))
