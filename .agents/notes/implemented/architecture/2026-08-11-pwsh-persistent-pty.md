@@ -28,6 +28,8 @@ One backend, two dialects: `shellDialect: 'bash' | 'pwsh'` (default `'bash'`; th
 
 Startup submission state is independent of output: the bootstrap runs once, and every follow-up send only observes readiness. The published `motd` reads the existing bounded scrollback because each send viewport contains only that send’s output; a later empty `stdin_read` result cannot replace earlier startup text. This reuses the session’s retention and UTF-8 byte limits without another accumulating buffer.
 
+Input-free polls accept a current foreground stdin wait without requiring departure from a pre-write wait, because no write occurred. Input-bearing sends retain the departure requirement. This keeps startup follow-up polls able to observe an already-idle shell without weakening the protection against stale readiness after new input.
+
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
 A new package mirroring `tool-bash-persistent`: same `Config` (`backendType` default `shell`, `timeoutMs`, `maxOutputChars`, `description`), same owner-scoped shell registry and serialized per-owner queue, same timeout/abort/exit/reset paths. The tool name is `pwsh`; it never co-mounts with the one-shot `tool-pwsh` because the preset rows are mutually exclusive per platform.

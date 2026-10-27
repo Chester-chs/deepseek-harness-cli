@@ -28,6 +28,8 @@ harness 在 Windows 上没有持久 shell。持久 `bash` 栈按构造就是 POS
 
 启动提交状态独立于输出：引导代码只执行一次，每次后续 send 仅观察就绪状态。发布的 `motd` 读取现有的有界 scrollback，因为每次 send 的 viewport 只包含该次 send 的输出；较晚到达的空 `stdin_read` 结果不能覆盖较早的启动文本。这复用了会话的保留上限与 UTF-8 字节限制，无需另建累积缓冲区。
 
+不发送输入的轮询可以接受当前前台 stdin 等待状态，无须先离开写入前的等待，因为此时没有发生写入。携带输入的 send 仍要求观察到离开旧等待状态。这使启动后的轮询能够发现已经空闲的 shell，同时保留新输入之后防止误用旧就绪状态的保护。
+
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
 新包镜像 `tool-bash-persistent`：同样的 `Config`（`backendType` 默认 `shell`、`timeoutMs`、`maxOutputChars`、`description`）、同样的 owner 作用域 shell 注册表与每 owner 串行队列、同样的超时/中止/退出/重置路径。工具名是 `pwsh`；它与一次性 `tool-pwsh` 永不共挂，因为预设行按平台互斥。
