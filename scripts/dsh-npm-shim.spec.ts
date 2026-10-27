@@ -18,12 +18,9 @@ describe('npm shim lifecycle', () => {
   it.each(['SIGINT', 'SIGTERM', 'SIGHUP'])('restores default %s handling before terminating itself', (signal) => {
     // Model POSIX delivery on every host; Windows process.kill does not run signal listeners.
     const child = Object.assign(new EventEmitter(), { kill: vi.fn() })
-    const shimProcess = Object.assign(new EventEmitter(), {
-      platform: 'linux', arch: 'x64', argv: ['node', 'shim'], pid: 123,
-      exit: vi.fn(),
-      kill: vi.fn((_pid: number, received: string) => {
-        expect(shimProcess.listenerCount(received)).toBe(0)
-      }),
+    const shimProcess = processFixture()
+    shimProcess.kill.mockImplementation((_pid: number, received: string) => {
+      expect(shimProcess.listenerCount(received)).toBe(0)
     })
     loadShim(child, shimProcess)
     shimProcess.emit(signal)
@@ -34,9 +31,7 @@ describe('npm shim lifecycle', () => {
 
   it('reports asynchronous spawn errors and exits with code 1', () => {
     const child = Object.assign(new EventEmitter(), { kill: vi.fn() })
-    const shimProcess = Object.assign(new EventEmitter(), {
-      platform: 'linux', arch: 'x64', argv: ['node', 'shim'], pid: 123, exit: vi.fn(),
-    })
+    const shimProcess = processFixture()
     const logger = { error: vi.fn() }
     loadShim(child, shimProcess, logger)
     child.emit('error', new Error('permission denied'))
@@ -82,6 +77,13 @@ describe('npm shim lifecycle', () => {
     }
   }, 10_000)
 })
+
+function processFixture() {
+  return Object.assign(new EventEmitter(), {
+    platform: 'linux', arch: 'x64', argv: ['node', 'shim'], pid: 123,
+    exit: vi.fn(), kill: vi.fn<(_pid: number, received: string) => void>(),
+  })
+}
 
 function loadShim(child: EventEmitter, shimProcess: object, logger: Pick<Console, 'error'> = console): void {
   const executableSource = shimSource
