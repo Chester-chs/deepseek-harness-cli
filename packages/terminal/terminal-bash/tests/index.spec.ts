@@ -413,6 +413,48 @@ describe('BashTerminalBackend startup rollback', () => {
     expect(session.motd).toBe('dsh> ')
   })
 
+  it.each([0, 80])('retains bounded pwsh startup output across readiness polls (output at %i ms)', async (outputDelay) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const output = new PassThrough()
+    const outcome = Promise.withResolvers<{ exitCode: number | null; signal: NodeJS.Signals | null }>()
+    const writes: string[] = []
+    const startupText = `${'startup '.repeat(20)}dsh> `
+    const terminal: SubprocessTerminalHandle = {
+      pid: 123, output, done: outcome.promise,
+      write: async (data) => {
+        writes.push(data)
+        if (writes.length === 1) setTimeout(() => { output.write(startupText) }, outputDelay)
+      },
+      inspectForeground: async () => ({ processGroupId: 123, inputWaiting: Date.now() >= 120 }),
+      signalForeground: async () => 123,
+      async terminate() {
+        output.end()
+        outcome.resolve({ exitCode: null, signal: 'SIGTERM' })
+      },
+    }
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/workspace' })
+      const backend = new BashTerminalBackend(ctx, {
+        ...config(), shellDialect: 'pwsh', timeoutMs: 500,
+      }, async () => terminal)
+      const spawning = backend.spawn(spec(agent(ctx)))
+      await vi.advanceTimersByTimeAsync(200)
+      const session = await spawning
+      try {
+        expect.soft(writes).toEqual([`${ENCODING_PREAMBLE}${PWSH_PROMPT_SETUP}\r`])
+        expect.soft(session.motd).toBe(startupText.slice(-config().maxReadBytes))
+        expect.soft(session.read({}).text).toBe(session.motd)
+      } finally {
+        await session.close('test complete')
+      }
+    } finally {
+      await ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
+  })
+
   it('rejects a pwsh bootstrap whose shell exits or times out', async () => {
     const ctx = new Context()
     await ctx.plugin(EmptySandbox)
