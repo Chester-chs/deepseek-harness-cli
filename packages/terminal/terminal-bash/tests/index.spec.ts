@@ -361,7 +361,7 @@ describe('BashTerminalBackend startup rollback', () => {
           cancel: () => false,
         }
       },
-      read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      read: () => ({ text: 'setup-echo dsh> ', totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,
@@ -399,7 +399,7 @@ describe('BashTerminalBackend startup rollback', () => {
           cancel: () => false,
         }
       },
-      read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      read: () => ({ text: "function prompt { 'dsh> ' }\ndsh> ", totalLines: 2, lineBegin: 0, lineEnd: 2, truncated: false }),
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,
@@ -410,7 +410,7 @@ describe('BashTerminalBackend startup rollback', () => {
     await backend.spawn(spec(agent(ctx)))
     expect(sends).toHaveLength(2)
     expect(sends[1]).toMatchObject({ text: '', submit: false })
-    expect(session.motd).toBe('dsh> ')
+    expect(session.motd).toBe("function prompt { 'dsh> ' }\ndsh> ")
   })
 
   it.each([0, 80])('retains bounded pwsh startup output across readiness polls (output at %i ms)', async (outputDelay) => {
@@ -549,7 +549,7 @@ describe('BashTerminalBackend startup rollback', () => {
           cancel: () => false,
         }
       },
-      read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      read: () => ({ text: 'dsh> ', totalLines: 1, lineBegin: 0, lineEnd: 1, truncated: false }),
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,
