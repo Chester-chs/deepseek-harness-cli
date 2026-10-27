@@ -89,6 +89,16 @@ describe('CI workflow', () => {
     expect(windowsNative.env).toMatchObject({
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000',
     })
+    if (!isRecord(windowsNative.env)) throw new TypeError('Windows CI must define runner-sized concurrency')
+    for (const [name, fallback] of [
+      ['DSH_COVERAGE_MAX_WORKERS', '3'],
+      ['DSH_COVERAGE_PARTITIONS', '2'],
+      ['DSH_GATE_CONCURRENCY', '2'],
+    ] as const) {
+      expect(windowsNative.env[name]).toContain('DSH_CI_FAILOVER_WINDOWS')
+      expect(windowsNative.env[name]).toContain('DSH_CI_HOSTED_WINDOWS_RUNNER')
+      expect(windowsNative.env[name]).toContain(`|| '${fallback}'`)
+    }
     const nativeCommandSteps = (windowsNative.steps as unknown[]).filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
     ))
